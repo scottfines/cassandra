@@ -191,6 +191,21 @@ public class ConfigHelper
 			return conf.getBoolean(USE_REMOTE_CLIENT,false);
 		}
 
+		/**
+		 * Whether or not to use a "Remote Client" when making cassandra queries.
+		 *
+		 * This should be set to {@code true } whenever Hadoop and Cassandra reside
+		 * on entirely separate clusters, so that requests can be made in a more fault-tolerant
+		 * manner. 
+		 *
+		 * Whenever Hadoop and Cassandra reside on the same set of nodes, this should be 
+		 * set to {@code false}, to avoid excessive network traffic.
+		 *
+		 * The default setting of this value is {@code false}, to keep CFIF's behavior in line with
+		 * legacy deployments.
+		 *
+		 * @param conf the Job configuration you are about to run
+		 */
 		public static void useRemoteClient(Configuration conf, boolean useRemoteClient)
 		{
 			conf.setBoolean(USE_REMOTE_CLIENT,useRemoteClient);

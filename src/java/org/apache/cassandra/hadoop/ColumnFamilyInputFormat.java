@@ -69,6 +69,22 @@ import org.slf4j.LoggerFactory;
  * so larger split sizes are better -- but if it is too large, you will run out of memory.
  *
  * The default split size is 64k rows.
+ *
+ * The default assumption of this implementation is that a TaskTracker is on the same node as the
+ * Cassandra instances. This topology eliminates the need for large amounts of network traffic between
+ * two independent clusters, but does not easily allow for things like bulk exports, or joining 
+ * Cassandra-based data sets to those in other platforms (e.g. HBase). 
+ *
+ * When it is not a good idea to colocate TaskTrackers and Cassandra, then there is also a "Remote Mode",
+ * which is set using
+ * 	ConfigHelper.useRemoteClient(conf,true)
+ * when this is made, requests to Cassandra will be done using socket timeouts, and will retry failed requests
+ * on different cassandra machines, which provides for greater fault-tolerance when used from a separate 
+ * Hadoop cluster.
+ *
+ * Note: If you are running TaskTrackers and Cassandra nodes together, then remote mode should <em>not</em>
+ * be used--the local version will attempt to read data off of the local cassandra instance only, 
+ * an optimization which is not present in remote mode. 
  */
 public class ColumnFamilyInputFormat extends InputFormat<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
     implements org.apache.hadoop.mapred.InputFormat<ByteBuffer, SortedMap<ByteBuffer, IColumn>>

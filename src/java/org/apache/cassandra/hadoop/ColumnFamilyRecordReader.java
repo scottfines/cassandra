@@ -156,7 +156,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 						return;
 
 					client = ConfigHelper.isRemote(conf) ? new RemoteClient(split.getLocations(),keyspace,conf) :
-																								 new LocalClient(getLocation(),keyspace,conf);
+																								 new LocalClient(split.getLocations(),keyspace,conf);
 
 					client.open();
 					/*
@@ -198,44 +198,6 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             return false;
         currentRow = iter.next();
         return true;
-    }
-
-    // we don't use endpointsnitch since we are trying to support hadoop nodes that are
-    // not necessarily on Cassandra machines, too.  This should be adequate for single-DC clusters, at least.
-    private String getLocation()
-    {
-        ArrayList<InetAddress> localAddresses = new ArrayList<InetAddress>();
-        try
-        {
-            Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
-            while (nets.hasMoreElements())
-                localAddresses.addAll(Collections.list(nets.nextElement().getInetAddresses()));
-        }
-        catch (SocketException e)
-        {
-            throw new AssertionError(e);
-        }
-
-        for (InetAddress address : localAddresses)
-        {
-            for (String location : split.getLocations())
-            {
-                InetAddress locationAddress = null;
-                try
-                {
-                    locationAddress = InetAddress.getByName(location);
-                }
-                catch (UnknownHostException e)
-                {
-                    throw new AssertionError(e);
-                }
-                if (address.equals(locationAddress))
-                {
-                    return location;
-                }
-            }
-        }
-        return split.getLocations()[0];
     }
 
     private abstract class RowIterator extends AbstractIterator<Pair<ByteBuffer, SortedMap<ByteBuffer, IColumn>>>

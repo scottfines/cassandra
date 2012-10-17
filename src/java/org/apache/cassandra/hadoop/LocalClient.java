@@ -1,19 +1,30 @@
 package org.apache.cassandra.hadoop;
 
 import java.io.IOException;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.thrift.transport.TSocket;
-import org.apache.cassandra.thrift.Cassandra;
-import org.apache.cassandra.thrift.AuthenticationRequest;
-import java.util.Map;
+
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.cassandra.auth.IAuthenticator;
-import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.TException;
-import org.apache.cassandra.thrift.UnavailableException;
-import org.apache.cassandra.thrift.TimedOutException;
+import org.apache.cassandra.thrift.AuthenticationRequest;
+import org.apache.cassandra.thrift.Cassandra;
 import org.apache.cassandra.thrift.InvalidRequestException;
+import org.apache.cassandra.thrift.TimedOutException;
+import org.apache.cassandra.thrift.UnavailableException;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
+import java.net.UnknownHostException;
+import java.lang.AssertionError;
+import java.util.Collections;
 
 class LocalClient implements Client{
 	private Cassandra.Client client;
@@ -22,10 +33,10 @@ class LocalClient implements Client{
 	private String location;
 	private String keyspace;
 
-	LocalClient(String location,String keyspace,Configuration conf)
+	LocalClient(String[] locations,String keyspace,Configuration conf)
 	{
 		this.conf = conf;
-		this.location = location;
+		this.location = getLocation(locations);
 		this.keyspace = keyspace;
 	}
 	
@@ -98,4 +109,42 @@ class LocalClient implements Client{
 			throw new IOException(e);
 		}
 	}
+
+  // we don't use endpointsnitch since we are trying to support hadoop nodes that are
+  // not necessarily on Cassandra machines, too.  This should be adequate for single-DC clusters, at least.
+  private String getLocation(String[] locations)
+  {
+      ArrayList<InetAddress> localAddresses = new ArrayList<InetAddress>();
+      try
+      {
+          Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
+          while (nets.hasMoreElements())
+              localAddresses.addAll(Collections.list(nets.nextElement().getInetAddresses()));
+      }
+      catch (SocketException e)
+      {
+          throw new AssertionError(e);
+      }
+
+      for (InetAddress address : localAddresses)
+      {
+          for (String location : locations)
+          {
+              InetAddress locationAddress = null;
+              try
+              {
+                  locationAddress = InetAddress.getByName(location);
+              }
+              catch (UnknownHostException e)
+              {
+                  throw new AssertionError(e);
+              }
+              if (address.equals(locationAddress))
+              {
+                  return location;
+              }
+          }
+      }
+      return locations[0];
+  }
 }
