@@ -67,6 +67,7 @@ public class ConfigHelper
     private static final String RANGE_BATCH_SIZE_CONFIG = "cassandra.range.batch.size";
     private static final int DEFAULT_RANGE_BATCH_SIZE = 4096;
     private static final String INPUT_THRIFT_PORT = "cassandra.input.thrift.port";
+		private static final String INPUT_THRIFT_TIMEOUT = "cassandra.input.thrift.timeout";
     private static final String OUTPUT_THRIFT_PORT = "cassandra.output.thrift.port";
     private static final String INPUT_INITIAL_THRIFT_ADDRESS = "cassandra.input.thrift.address";
     private static final String OUTPUT_INITIAL_THRIFT_ADDRESS = "cassandra.output.thrift.address";
@@ -76,6 +77,7 @@ public class ConfigHelper
     private static final String OUTPUT_COMPRESSION_CHUNK_LENGTH = "cassandra.output.compression.length";
     private static final String INPUT_TRANSPORT_FACTORY_CLASS = "cassandra.input.transport.factory.class";
     private static final String OUTPUT_TRANSPORT_FACTORY_CLASS = "cassandra.output.transport.factory.class";
+		private static final String USE_REMOTE_CLIENT="cassandra.use.remote.client";
 
     private static final Logger logger = LoggerFactory.getLogger(ConfigHelper.class);
 
@@ -183,6 +185,16 @@ public class ConfigHelper
     {
         return conf.getInt(RANGE_BATCH_SIZE_CONFIG, DEFAULT_RANGE_BATCH_SIZE);
     }
+
+		public static boolean isRemote(Configuration conf)
+		{
+			return conf.getBoolean(USE_REMOTE_CLIENT,false);
+		}
+
+		public static void useRemoteClient(Configuration conf, boolean useRemoteClient)
+		{
+			conf.setBoolean(USE_REMOTE_CLIENT,useRemoteClient);
+		}
 
     /**
      * Set the size of the input split.
@@ -376,10 +388,20 @@ public class ConfigHelper
         return Integer.parseInt(conf.get(INPUT_THRIFT_PORT, "9160"));
     }
 
+		public static int getInputRpcTimeout(Configuration conf)
+		{
+			return Integer.parseInt(conf.get(INPUT_THRIFT_TIMEOUT,"0"));
+		}
+
     public static void setInputRpcPort(Configuration conf, String port)
     {
         conf.set(INPUT_THRIFT_PORT, port);
     }
+
+		public static void setInputRpcTimeout(Configuration conf, String timeout)
+		{
+			conf.set(INPUT_THRIFT_TIMEOUT,timeout);
+		}
 
     public static String getInputInitialAddress(Configuration conf)
     {

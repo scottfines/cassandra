@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.auth.IAuthenticator;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.TypeParser;
@@ -46,6 +47,7 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TSocket;
+import org.apache.cassandra.thrift.InvalidRequestException;
 
 public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
     implements org.apache.hadoop.mapred.RecordReader<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
@@ -63,8 +65,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
     private int batchSize; // fetch this many per batch
     private String cfName;
     private String keyspace;
-    private TSocket socket;
-    private Cassandra.Client client;
+		private Client client;
     private ConsistencyLevel consistencyLevel;
     private int keyBufferSize = 8192;
     private List<IndexExpression> filter;
@@ -82,12 +83,15 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 
     public void close()
     {
+			client.close();
+			/*
         if (socket != null && socket.isOpen())
         {
             socket.close();
             socket = null;
             client = null;
         }
+				*/
     }
 
     public ByteBuffer getCurrentKey()
@@ -144,11 +148,18 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         cfName = ConfigHelper.getInputColumnFamily(conf);
         consistencyLevel = ConsistencyLevel.valueOf(ConfigHelper.getReadConsistencyLevel(conf));
 
-
         keyspace = ConfigHelper.getInputKeyspace(conf);
 
         try
         {
+					if(client !=null && client.isOpen())
+						return;
+
+					client = ConfigHelper.isRemote(conf) ? new RemoteClient(split.getLocations(),keyspace,conf) :
+																								 new LocalClient(getLocation(),keyspace,conf);
+
+					client.open();
+					/*
             // only need to connect once
             if (socket != null && socket.isOpen())
                 return;
@@ -170,6 +181,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                 AuthenticationRequest authRequest = new AuthenticationRequest(creds);
                 client.login(authRequest);
             }
+						*/
         }
         catch (Exception e)
         {
@@ -230,14 +242,57 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
     {
         protected List<KeySlice> rows;
         protected int totalRead = 0;
-        protected final AbstractType<?> comparator;
-        protected final AbstractType<?> subComparator;
-        protected final IPartitioner partitioner;
+        protected AbstractType<?> comparator;
+        protected AbstractType<?> subComparator;
+        protected IPartitioner partitioner;
 
         private RowIterator()
         {
             try
             {
+							client.execute(new Client.Command<Void>(){
+								@Override
+								public Void execute(Cassandra.Client cassandraClient) throws TimedOutException,
+																											UnavailableException,TException,InvalidRequestException
+								{
+									/*
+									 * Nothing in what follows actually will throw a TimedOutException or UnavailableException,
+									 * but may as well indicate that it could someday.
+									 */
+									try
+									{
+		                RowIterator.this.partitioner = 
+																FBUtilities.newPartitioner(cassandraClient.describe_partitioner());
+		
+		                // Get the Keyspace metadata, then get the specific CF metadata
+		                // in order to populate the sub/comparator.
+		                KsDef ks_def = cassandraClient.describe_keyspace(keyspace);
+		                List<String> cfnames = new ArrayList<String>();
+		                for (CfDef cfd : ks_def.cf_defs)
+		                    cfnames.add(cfd.name);
+		                int idx = cfnames.indexOf(cfName);
+		                CfDef cf_def = ks_def.cf_defs.get(idx);
+		
+		                RowIterator.this.comparator = TypeParser.parse(cf_def.comparator_type);
+		                RowIterator.this.subComparator = cf_def.subcomparator_type == null ? null : 
+																										TypeParser.parse(cf_def.subcomparator_type);
+									}
+									catch(ConfigurationException e)
+									{
+										throw new TException(e);
+									}
+									catch(NotFoundException e)
+									{
+										throw new TException(e);
+									}
+									catch(SyntaxException e)
+									{
+										throw new TException(e);
+									}
+									return null;
+								}
+							});
+								/*
                 partitioner = FBUtilities.newPartitioner(client.describe_partitioner());
 
                 // Get the Keyspace metadata, then get the specific CF metadata
@@ -264,6 +319,12 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             {
                 throw new RuntimeException("unable to load keyspace " + keyspace, e);
             }
+						*/
+						}
+						catch (IOException e)
+						{
+							throw new RuntimeException("Unexpected error initializing RowIterator",e);
+						}
         }
 
         /**
@@ -303,7 +364,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 
         private IColumn unthriftifyCounter(CounterColumn column)
         {
-            //CounterColumns read the counterID from the System table, so need the StorageService running and access
+            //CounterColumns read the nodeID from the System table, so need the StorageService running and access
             //to cassandra.yaml. To avoid a Hadoop needing access to yaml return a regular Column.
             return new org.apache.cassandra.db.Column(column.name, ByteBufferUtil.bytes(column.value), 0);
         }
@@ -344,52 +405,69 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                 }
             }
 
-            KeyRange keyRange = new KeyRange(batchSize)
+            final KeyRange keyRange = new KeyRange(batchSize)
                                 .setStart_token(startToken)
                                 .setEnd_token(split.getEndToken())
                                 .setRow_filter(filter);
             try
             {
-                rows = client.get_range_slices(new ColumnParent(cfName), predicate, keyRange, consistencyLevel);
+								rows = client.execute(new Client.Command<List<KeySlice>>()
+								{
+									@Override
+									public List<KeySlice> execute(Cassandra.Client cassandraClient) 
+											throws TimedOutException,UnavailableException,InvalidRequestException,TException
+									{
+										return cassandraClient.get_range_slices(
+																	new ColumnParent(cfName),predicate,keyRange,consistencyLevel);
+									}
+								});
+						}
+						catch (IOException e)
+						{
+							throw new RuntimeException("Unexpected error getting range slices",e);
+						}
+            //rows = client.get_range_slices(new ColumnParent(cfName), predicate, keyRange, consistencyLevel);
 
-                // nothing new? reached the end
+            // nothing new? reached the end
+            if (rows.isEmpty())
+            {
+                rows = null;
+                return;
+            }
+
+            // remove ghosts when fetching all columns
+            if (isEmptyPredicate)
+            {
+                Iterator<KeySlice> it = rows.iterator();
+                KeySlice ks;
+                do
+                {
+                    ks = it.next();
+                    if (ks.getColumnsSize() == 0)
+                    {
+                        it.remove();
+                    }
+                } while (it.hasNext());
+
+                // all ghosts, spooky
                 if (rows.isEmpty())
                 {
-                    rows = null;
+                    // maybeInit assumes it can get the start-with key from the rows collection, so add back the last
+                    rows.add(ks);
+                    maybeInit();
                     return;
                 }
+            }
 
-                // remove ghosts when fetching all columns
-                if (isEmptyPredicate)
-                {
-                    Iterator<KeySlice> it = rows.iterator();
-                    KeySlice ks;
-                    do
-                    {
-                        ks = it.next();
-                        if (ks.getColumnsSize() == 0)
-                        {
-                            it.remove();
-                        }
-                    } while (it.hasNext());
-
-                    // all ghosts, spooky
-                    if (rows.isEmpty())
-                    {
-                        // maybeInit assumes it can get the start-with key from the rows collection, so add back the last
-                        rows.add(ks);
-                        maybeInit();
-                        return;
-                    }
-                }
-
-                // reset to iterate through this new batch
-                i = 0;
+            // reset to iterate through this new batch
+            i = 0;
+						/*
             }
             catch (Exception e)
             {
                 throw new RuntimeException(e);
             }
+						*/
         }
 
         protected Pair<ByteBuffer, SortedMap<ByteBuffer, IColumn>> computeNext()
@@ -406,7 +484,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                 IColumn column = unthriftify(cosc);
                 map.put(column.name(), column);
             }
-            return Pair.create(ks.key, map);
+            return Pair.create(ks.key,map);
         }
     }
 
@@ -441,7 +519,31 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 
             try
             {
-                rows = client.get_paged_slice(cfName, keyRange, lastColumn, consistencyLevel);
+							final ByteBuffer lastColumnRequest = lastColumn;
+							final KeyRange rangeRequest = keyRange;
+							rows = client.execute(new Client.Command<List<KeySlice>>()
+							{
+								@Override
+								public List<KeySlice> execute(Cassandra.Client cassandraClient) 
+									throws TimedOutException,UnavailableException,TException
+								{
+									try
+									{
+										return cassandraClient.get_paged_slice(cfName,rangeRequest,
+																													lastColumnRequest,consistencyLevel);
+									}
+									catch(InvalidRequestException e)
+									{
+										throw new TException(e);
+									}
+								}
+							});
+						}
+						catch(IOException e)
+						{
+							throw new RuntimeException("Unexpected error getting paged range slice",e);
+						}
+//                rows = client.get_paged_slice(cfName, keyRange, lastColumn, consistencyLevel);
                 int n = 0;
                 for (KeySlice row : rows)
                     n += row.columns.size();
@@ -453,11 +555,13 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                     wideColumns.next();
                 if (!wideColumns.hasNext())
                     rows = null;
+						/*
             }
             catch (Exception e)
             {
                 throw new RuntimeException(e);
             }
+						*/
         }
 
         protected Pair<ByteBuffer, SortedMap<ByteBuffer, IColumn>> computeNext()
