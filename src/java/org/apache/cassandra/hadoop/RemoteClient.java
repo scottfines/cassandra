@@ -37,6 +37,8 @@ import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 
+import org.apache.commons.lang.StringUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.cassandra.thrift.InvalidRequestException;
@@ -66,9 +68,12 @@ class RemoteClient implements Client{
 
 	RemoteClient(String[] locations,String keyspace,Configuration conf ) 
 	{
+		org.apache.log4j.Logger underLogger = org.apache.log4j.Logger.getLogger(RemoteClient.class);
+		underLogger.setLevel(org.apache.log4j.Level.DEBUG);
 		this.locations = locations;
 		this.keyspace = keyspace;
 		this.conf = conf;
+		logger.info("This is a test info level log message");
 	}
 
 	@Override
@@ -135,6 +140,7 @@ class RemoteClient implements Client{
 			catch (InvalidRequestException e)
 			{
 				//can't do anything--this is a configuration problem
+				logger.error("Failing request due to poor configuration",e);
 				throw new IOException(e);
 			}
 			catch (TException e)
@@ -151,6 +157,7 @@ class RemoteClient implements Client{
 		//make sure any currently open sockets get closed
 		if (currentSocket !=null &&currentSocket.isOpen())
 		{
+			logger.trace("Closing already open socket");
 			currentSocket.close();
 		}
 
@@ -161,6 +168,7 @@ class RemoteClient implements Client{
 			currentLocation = locations[pos];
 			try
 			{
+				logger.trace("Attempting to connect to endpoint {}",currentLocation);
 				int rpcPort = ConfigHelper.getInputRpcPort(conf);
 				int rpcTimeout = ConfigHelper.getInputRpcTimeout(conf);
 				currentSocket = new TSocket(currentLocation,rpcPort,rpcTimeout);
@@ -177,6 +185,8 @@ class RemoteClient implements Client{
 	        AuthenticationRequest authRequest = new AuthenticationRequest(creds);
 	        currentClient.login(authRequest);
 				}
+				logger.trace("Successfully connected to endpoint {}",currentLocation);
+				return;
 			}
 			catch (InvalidRequestException e)
 			{
@@ -207,6 +217,6 @@ class RemoteClient implements Client{
 				throw new IOException(e);
 			}
 		}
-		throw new IOException("Unable to connect to any replicas");
+		throw new IOException("Unable to connect to any of replicas ["+StringUtils.join(locations,",")+"]");
 	}
 }

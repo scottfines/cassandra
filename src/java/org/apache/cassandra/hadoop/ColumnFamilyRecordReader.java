@@ -473,7 +473,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                 return;
 
             KeyRange keyRange;
-            ByteBuffer startColumn;
+//            ByteBuffer startColumn;
             if (totalRead == 0)
             {
                 String startToken = split.getStartToken();
@@ -490,34 +490,10 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                           .setStart_key(lastRow.key)
                           .setEnd_token(split.getEndToken())
                           .setRow_filter(filter);
+
             }
 
-            try
-            {
-							final ByteBuffer lastColumnRequest = lastColumn;
-							final KeyRange rangeRequest = keyRange;
-							rows = client.execute(new Client.Command<List<KeySlice>>()
-							{
-								@Override
-								public List<KeySlice> execute(Cassandra.Client cassandraClient) 
-									throws TimedOutException,UnavailableException,TException
-								{
-									try
-									{
-										return cassandraClient.get_paged_slice(cfName,rangeRequest,
-																													lastColumnRequest,consistencyLevel);
-									}
-									catch(InvalidRequestException e)
-									{
-										throw new TException(e);
-									}
-								}
-							});
-						}
-						catch(IOException e)
-						{
-							throw new RuntimeException("Unexpected error getting paged range slice",e);
-						}
+							rows = getRows(keyRange,lastColumn);
 //                rows = client.get_paged_slice(cfName, keyRange, lastColumn, consistencyLevel);
                 int n = 0;
                 for (KeySlice row : rows)
@@ -538,6 +514,32 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             }
 						*/
         }
+				private List<KeySlice> getRows(final KeyRange range, final ByteBuffer lastColumn) {
+					try
+					{
+						return client.execute(new Client.Command<List<KeySlice>>()
+							{
+								@Override
+								public List<KeySlice> execute(Cassandra.Client cassandraClient) 
+									throws TimedOutException,UnavailableException,TException
+								{
+									try
+									{
+										return cassandraClient.get_paged_slice(cfName,range,
+																													lastColumn,consistencyLevel);
+									}
+									catch(InvalidRequestException e)
+									{
+										throw new TException(e);
+									}
+								}
+							});
+					}
+					catch(IOException e)
+					{
+						throw new RuntimeException("Unexpected error getting paged range slice",e);
+					}
+				}
 
         protected Pair<ByteBuffer, SortedMap<ByteBuffer, IColumn>> computeNext()
         {

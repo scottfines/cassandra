@@ -112,9 +112,8 @@ public class Header
         }
         return size;
     }
-}
 
-class HeaderSerializer implements IVersionedSerializer<Header>
+static class HeaderSerializer implements IVersionedSerializer<Header>
 {
     public void serialize(Header t, DataOutput dos, int version) throws IOException
     {
@@ -153,4 +152,5 @@ class HeaderSerializer implements IVersionedSerializer<Header>
     }
 }
 
+}
 
