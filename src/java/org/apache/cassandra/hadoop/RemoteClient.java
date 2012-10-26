@@ -73,7 +73,6 @@ class RemoteClient implements Client{
 		this.locations = locations;
 		this.keyspace = keyspace;
 		this.conf = conf;
-		logger.info("This is a test info level log message");
 	}
 
 	@Override
