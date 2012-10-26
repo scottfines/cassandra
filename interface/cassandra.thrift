@@ -572,8 +572,9 @@ service Cassandra {
   */
   list<KeySlice> get_paged_slice(1:required string column_family,
                                  2:required KeyRange range,
-                                 3:required binary start_column,
-                                 4:required ConsistencyLevel consistency_level=ConsistencyLevel.ONE)
+																 3:required binary start_column,
+                                 4:required ConsistencyLevel consistency_level=ConsistencyLevel.ONE,
+																 5:required SlicePredicate predicate)
                  throws (1:InvalidRequestException ire, 2:UnavailableException ue, 3:TimedOutException te),
 
   /**

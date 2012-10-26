@@ -712,7 +712,7 @@ public class CassandraServer implements Cassandra.Iface
         return thriftifyKeySlices(rows, column_parent, predicate);
     }
 
-    public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level)
+    public List<KeySlice> get_paged_slice(String column_family, KeyRange range,ByteBuffer start_column, ConsistencyLevel consistency_level,SlicePredicate predicate)
     throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
         logger.debug("get_paged_slice");
@@ -724,8 +724,6 @@ public class CassandraServer implements Cassandra.Iface
         CFMetaData metadata = ThriftValidation.validateColumnFamily(keyspace, column_family);
         ThriftValidation.validateKeyRange(metadata, null, range);
         ThriftValidation.validateConsistencyLevel(keyspace, consistency_level, RequestType.READ);
-
-        SlicePredicate predicate = new SlicePredicate().setSlice_range(new SliceRange(start_column, ByteBufferUtil.EMPTY_BYTE_BUFFER, false, -1));
 
         IPartitioner p = StorageService.getPartitioner();
         AbstractBounds<RowPosition> bounds;
@@ -745,17 +743,70 @@ public class CassandraServer implements Cassandra.Iface
         }
 
         List<Row> rows;
+				Row firstRow = null;
         try
         {
-            schedule(DatabaseDescriptor.getRpcTimeout());
-            try
-            {
-                rows = StorageProxy.getRangeSlice(new RangeSliceCommand(keyspace, column_family, null, predicate, bounds, range.row_filter, range.count, true, true), consistency_level);
-            }
-            finally
-            {
-                release();
-            }
+						/*
+						 * It's likely that start_column falls within the passed in predicate, and does not directly 
+						 * line up with the start of the predicate. This is unfortunate, since RangeSlices can't 
+						 * start in the middle of a predicate but still contain values in the predicate. This could be 
+						 * solved one of two ways:
+						 *
+						 * 1. Work over the RangeSliceCommand and it's accompanying logic to be able to start a query
+						 * in the middle of a predicate. This will probably take a lot of work, but may be more efficient
+						 * than 2
+						 *
+						 * 2. Query the first row separately from the other rows, using a different predicate, the same
+						 * row bounds, and restricting it to only allowing 1 row back. Then making a second RangeCommand which
+						 * excludes the first row and uses the original SlicePredicate. This is simpler, but may be less efficient.
+						 *
+						 * For simplicity's sake, the following code goes for option 2).
+						 */
+						schedule(DatabaseDescriptor.getRpcTimeout());
+						SlicePredicate firstPred = new SlicePredicate(predicate);
+						firstPred.getSlice_range().setStart(start_column);
+						firstPred.getSlice_range().setCount(range.count);
+						List<Row> firstRows;
+						try
+						{
+							firstRows = StorageProxy.getRangeSlice(new RangeSliceCommand(keyspace,column_family,null,firstPred, bounds,range.row_filter, 1,false,true),consistency_level);
+						}
+						finally
+						{
+							release();
+						}
+						if(firstRows!=null){
+							/*
+							 * If firstRows returns data, then find the first row, keep a handle on it, and exclude it from the next query.
+							 * You need to keep a handle on it, because you have to make sure and add that row's results to the rest later.
+							 */
+							for(Row row:firstRows){
+								if(firstRow == null) firstRow = row;
+								else if (row.key.compareTo(firstRow.key)>0){
+									firstRow = row;	
+								}
+							}
+							//use a Range here to be exclusive on the left key, inclusive on right key in the next query.
+							if(firstRow!=null)
+								bounds = new Range<RowPosition>(RowPosition.forKey(firstRow.key.key,p),bounds.right);
+						}
+						int colCount = firstRow!=null? firstRow.getLiveColumnCount() : 0;
+						rows = new ArrayList<Row>();
+						if(firstRow!=null) rows.add(firstRow);
+						//only ask for the second RangeSlice if you need more data
+						if(range.count> colCount)
+						{
+							//now get the rest of the data
+	            schedule(DatabaseDescriptor.getRpcTimeout());
+	            try
+	            {
+	                rows.addAll(StorageProxy.getRangeSlice(new RangeSliceCommand(keyspace, column_family, null, predicate, bounds, range.row_filter, range.count-colCount, true, true), consistency_level));
+	            }
+	            finally
+	            {
+	                release();
+	            }
+						}
             assert rows != null;
         }
         catch (TimeoutException e)
@@ -767,7 +818,7 @@ public class CassandraServer implements Cassandra.Iface
         {
             throw new RuntimeException(e);
         }
-
+				
         return thriftifyKeySlices(rows, new ColumnParent(column_family), predicate);
     }
 
@@ -777,7 +828,8 @@ public class CassandraServer implements Cassandra.Iface
         boolean reversed = predicate.slice_range != null && predicate.slice_range.reversed;
         for (Row row : rows)
         {
-            List<ColumnOrSuperColumn> thriftifiedColumns = thriftifyColumnFamily(row.cf, column_parent.super_column != null, reversed);
+            List<ColumnOrSuperColumn> thriftifiedColumns = 
+										thriftifyColumnFamily(row.cf, column_parent.super_column != null, reversed);
             keySlices.add(new KeySlice(row.key.key, thriftifiedColumns));
         }
 

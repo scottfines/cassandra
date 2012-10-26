@@ -119,8 +119,9 @@ public class Cassandra {
      * @param range
      * @param start_column
      * @param consistency_level
+     * @param predicate
      */
-    public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException;
+    public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, SlicePredicate predicate) throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException;
 
     /**
      * Returns the subset of columns specified in SlicePredicate for the rows matching the IndexClause
@@ -366,7 +367,7 @@ public class Cassandra {
 
     public void get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.get_range_slices_call> resultHandler) throws org.apache.thrift.TException;
 
-    public void get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.get_paged_slice_call> resultHandler) throws org.apache.thrift.TException;
+    public void get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, SlicePredicate predicate, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.get_paged_slice_call> resultHandler) throws org.apache.thrift.TException;
 
     public void get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.get_indexed_slices_call> resultHandler) throws org.apache.thrift.TException;
 
@@ -705,19 +706,20 @@ public class Cassandra {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "get_range_slices failed: unknown result");
     }
 
-    public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException
+    public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, SlicePredicate predicate) throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException
     {
-      send_get_paged_slice(column_family, range, start_column, consistency_level);
+      send_get_paged_slice(column_family, range, start_column, consistency_level, predicate);
       return recv_get_paged_slice();
     }
 
-    public void send_get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level) throws org.apache.thrift.TException
+    public void send_get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, SlicePredicate predicate) throws org.apache.thrift.TException
     {
       get_paged_slice_args args = new get_paged_slice_args();
       args.setColumn_family(column_family);
       args.setRange(range);
       args.setStart_column(start_column);
       args.setConsistency_level(consistency_level);
+      args.setPredicate(predicate);
       sendBase("get_paged_slice", args);
     }
 
@@ -1829,9 +1831,9 @@ public class Cassandra {
       }
     }
 
-    public void get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<get_paged_slice_call> resultHandler) throws org.apache.thrift.TException {
+    public void get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, SlicePredicate predicate, org.apache.thrift.async.AsyncMethodCallback<get_paged_slice_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
-      get_paged_slice_call method_call = new get_paged_slice_call(column_family, range, start_column, consistency_level, resultHandler, this, ___protocolFactory, ___transport);
+      get_paged_slice_call method_call = new get_paged_slice_call(column_family, range, start_column, consistency_level, predicate, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
       ___manager.call(method_call);
     }
@@ -1841,12 +1843,14 @@ public class Cassandra {
       private KeyRange range;
       private ByteBuffer start_column;
       private ConsistencyLevel consistency_level;
-      public get_paged_slice_call(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<get_paged_slice_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+      private SlicePredicate predicate;
+      public get_paged_slice_call(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, SlicePredicate predicate, org.apache.thrift.async.AsyncMethodCallback<get_paged_slice_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
         this.column_family = column_family;
         this.range = range;
         this.start_column = start_column;
         this.consistency_level = consistency_level;
+        this.predicate = predicate;
       }
 
       public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
@@ -1856,6 +1860,7 @@ public class Cassandra {
         args.setRange(range);
         args.setStart_column(start_column);
         args.setConsistency_level(consistency_level);
+        args.setPredicate(predicate);
         args.write(prot);
         prot.writeMessageEnd();
       }
@@ -3029,7 +3034,7 @@ public class Cassandra {
       protected get_paged_slice_result getResult(I iface, get_paged_slice_args args) throws org.apache.thrift.TException {
         get_paged_slice_result result = new get_paged_slice_result();
         try {
-          result.success = iface.get_paged_slice(args.column_family, args.range, args.start_column, args.consistency_level);
+          result.success = iface.get_paged_slice(args.column_family, args.range, args.start_column, args.consistency_level, args.predicate);
         } catch (InvalidRequestException ire) {
           result.ire = ire;
         } catch (UnavailableException ue) {
@@ -8610,6 +8615,8 @@ public class Cassandra {
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
       try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bit_vector = new BitSet(1);
         read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
       } catch (org.apache.thrift.TException te) {
         throw new java.io.IOException(te);
@@ -12468,6 +12475,7 @@ public class Cassandra {
     private static final org.apache.thrift.protocol.TField RANGE_FIELD_DESC = new org.apache.thrift.protocol.TField("range", org.apache.thrift.protocol.TType.STRUCT, (short)2);
     private static final org.apache.thrift.protocol.TField START_COLUMN_FIELD_DESC = new org.apache.thrift.protocol.TField("start_column", org.apache.thrift.protocol.TType.STRING, (short)3);
     private static final org.apache.thrift.protocol.TField CONSISTENCY_LEVEL_FIELD_DESC = new org.apache.thrift.protocol.TField("consistency_level", org.apache.thrift.protocol.TType.I32, (short)4);
+    private static final org.apache.thrift.protocol.TField PREDICATE_FIELD_DESC = new org.apache.thrift.protocol.TField("predicate", org.apache.thrift.protocol.TType.STRUCT, (short)5);
 
     public String column_family; // required
     public KeyRange range; // required
@@ -12477,6 +12485,7 @@ public class Cassandra {
      * @see ConsistencyLevel
      */
     public ConsistencyLevel consistency_level; // required
+    public SlicePredicate predicate; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
@@ -12487,7 +12496,8 @@ public class Cassandra {
        * 
        * @see ConsistencyLevel
        */
-      CONSISTENCY_LEVEL((short)4, "consistency_level");
+      CONSISTENCY_LEVEL((short)4, "consistency_level"),
+      PREDICATE((short)5, "predicate");
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -12510,6 +12520,8 @@ public class Cassandra {
             return START_COLUMN;
           case 4: // CONSISTENCY_LEVEL
             return CONSISTENCY_LEVEL;
+          case 5: // PREDICATE
+            return PREDICATE;
           default:
             return null;
         }
@@ -12562,6 +12574,8 @@ public class Cassandra {
           new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING          , true)));
       tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.REQUIRED, 
           new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      tmpMap.put(_Fields.PREDICATE, new org.apache.thrift.meta_data.FieldMetaData("predicate", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, SlicePredicate.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
       org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(get_paged_slice_args.class, metaDataMap);
     }
@@ -12575,13 +12589,15 @@ public class Cassandra {
       String column_family,
       KeyRange range,
       ByteBuffer start_column,
-      ConsistencyLevel consistency_level)
+      ConsistencyLevel consistency_level,
+      SlicePredicate predicate)
     {
       this();
       this.column_family = column_family;
       this.range = range;
       this.start_column = start_column;
       this.consistency_level = consistency_level;
+      this.predicate = predicate;
     }
 
     /**
@@ -12601,6 +12617,9 @@ public class Cassandra {
       if (other.isSetConsistency_level()) {
         this.consistency_level = other.consistency_level;
       }
+      if (other.isSetPredicate()) {
+        this.predicate = new SlicePredicate(other.predicate);
+      }
     }
 
     public get_paged_slice_args deepCopy() {
@@ -12614,6 +12633,7 @@ public class Cassandra {
       this.start_column = null;
       this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
 
+      this.predicate = null;
     }
 
     public String getColumn_family() {
@@ -12730,6 +12750,30 @@ public class Cassandra {
       }
     }
 
+    public SlicePredicate getPredicate() {
+      return this.predicate;
+    }
+
+    public get_paged_slice_args setPredicate(SlicePredicate predicate) {
+      this.predicate = predicate;
+      return this;
+    }
+
+    public void unsetPredicate() {
+      this.predicate = null;
+    }
+
+    /** Returns true if field predicate is set (has been assigned a value) and false otherwise */
+    public boolean isSetPredicate() {
+      return this.predicate != null;
+    }
+
+    public void setPredicateIsSet(boolean value) {
+      if (!value) {
+        this.predicate = null;
+      }
+    }
+
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case COLUMN_FAMILY:
@@ -12764,6 +12808,14 @@ public class Cassandra {
         }
         break;
 
+      case PREDICATE:
+        if (value == null) {
+          unsetPredicate();
+        } else {
+          setPredicate((SlicePredicate)value);
+        }
+        break;
+
       }
     }
 
@@ -12780,6 +12832,9 @@ public class Cassandra {
 
       case CONSISTENCY_LEVEL:
         return getConsistency_level();
+
+      case PREDICATE:
+        return getPredicate();
 
       }
       throw new IllegalStateException();
@@ -12800,6 +12855,8 @@ public class Cassandra {
         return isSetStart_column();
       case CONSISTENCY_LEVEL:
         return isSetConsistency_level();
+      case PREDICATE:
+        return isSetPredicate();
       }
       throw new IllegalStateException();
     }
@@ -12853,6 +12910,15 @@ public class Cassandra {
           return false;
       }
 
+      boolean this_present_predicate = true && this.isSetPredicate();
+      boolean that_present_predicate = true && that.isSetPredicate();
+      if (this_present_predicate || that_present_predicate) {
+        if (!(this_present_predicate && that_present_predicate))
+          return false;
+        if (!this.predicate.equals(that.predicate))
+          return false;
+      }
+
       return true;
     }
 
@@ -12879,6 +12945,11 @@ public class Cassandra {
       builder.append(present_consistency_level);
       if (present_consistency_level)
         builder.append(consistency_level.getValue());
+
+      boolean present_predicate = true && (isSetPredicate());
+      builder.append(present_predicate);
+      if (present_predicate)
+        builder.append(predicate);
 
       return builder.toHashCode();
     }
@@ -12931,6 +13002,16 @@ public class Cassandra {
           return lastComparison;
         }
       }
+      lastComparison = Boolean.valueOf(isSetPredicate()).compareTo(typedOther.isSetPredicate());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetPredicate()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.predicate, typedOther.predicate);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
       return 0;
     }
 
@@ -12977,6 +13058,14 @@ public class Cassandra {
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
+          case 5: // PREDICATE
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
+              this.predicate = new SlicePredicate();
+              this.predicate.read(iprot);
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
           default:
             org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
         }
@@ -13010,6 +13099,11 @@ public class Cassandra {
       if (this.consistency_level != null) {
         oprot.writeFieldBegin(CONSISTENCY_LEVEL_FIELD_DESC);
         oprot.writeI32(this.consistency_level.getValue());
+        oprot.writeFieldEnd();
+      }
+      if (this.predicate != null) {
+        oprot.writeFieldBegin(PREDICATE_FIELD_DESC);
+        this.predicate.write(oprot);
         oprot.writeFieldEnd();
       }
       oprot.writeFieldStop();
@@ -13052,6 +13146,14 @@ public class Cassandra {
         sb.append(this.consistency_level);
       }
       first = false;
+      if (!first) sb.append(", ");
+      sb.append("predicate:");
+      if (this.predicate == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.predicate);
+      }
+      first = false;
       sb.append(")");
       return sb.toString();
     }
@@ -13069,6 +13171,9 @@ public class Cassandra {
       }
       if (consistency_level == null) {
         throw new org.apache.thrift.protocol.TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
+      }
+      if (predicate == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'predicate' was not present! Struct: " + toString());
       }
     }
 
@@ -17817,6 +17922,8 @@ public class Cassandra {
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
       try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bit_vector = new BitSet(1);
         read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
       } catch (org.apache.thrift.TException te) {
         throw new java.io.IOException(te);
@@ -27266,8 +27373,6 @@ public class Cassandra {
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
       try {
-        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
-        __isset_bit_vector = new BitSet(1);
         read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
       } catch (org.apache.thrift.TException te) {
         throw new java.io.IOException(te);

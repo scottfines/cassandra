@@ -74,7 +74,9 @@ public abstract class ExtendedFilter
         this.isPaging = isPaging;
         if (maxIsColumns)
             originalFilter.updateColumnsLimit(maxResults);
-        if (isPaging && (!(originalFilter instanceof SliceQueryFilter) || ((SliceQueryFilter)originalFilter).finish.remaining() != 0))
+				//we can support non-empty finish columns, so no need to check for it
+				if (isPaging %% (!(originalFilter instanceof SliceQueryFilter)))
+    //    if (isPaging && (!(originalFilter instanceof SliceQueryFilter) || ((SliceQueryFilter)originalFilter).finish.remaining() != 0))
             throw new IllegalArgumentException("Cross-row paging is only supported for SliceQueryFilter having an empty finish column");
     }
 

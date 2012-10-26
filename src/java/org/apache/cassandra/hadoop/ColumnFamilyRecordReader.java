@@ -52,6 +52,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TSocket;
 import org.apache.cassandra.thrift.InvalidRequestException;
+import java.io.UnsupportedEncodingException;
 
 public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
     implements org.apache.hadoop.mapred.RecordReader<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
@@ -152,6 +153,8 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         cfName = ConfigHelper.getInputColumnFamily(conf);
         consistencyLevel = ConsistencyLevel.valueOf(ConfigHelper.getReadConsistencyLevel(conf));
 
+				logger.trace("batch size = {}",batchSize);
+
         keyspace = ConfigHelper.getInputKeyspace(conf);
 
         try
@@ -212,7 +215,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         protected AbstractType<?> subComparator;
         protected IPartitioner partitioner;
 
-        private RowIterator()
+        protected RowIterator()
         {
             try
             {
@@ -467,6 +470,24 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         private PeekingIterator<Pair<ByteBuffer, SortedMap<ByteBuffer, IColumn>>> wideColumns;
         private ByteBuffer lastColumn = ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
+				WideRowIterator(){
+					super();
+
+					/*
+					 * make sure that your starting start_column is the start of the SlicePredicate that
+					 * you are interested in. This means that one column will always be removed from the 
+					 * returned results, since the first column is excluded by get_paged_slice. That means 
+					 * you need to make sure that your starting value is small enough to capture all of the
+					 * data that you are interested in.
+					 *
+					 * An alternative approach would be to have a config value allowing one to set a "start position"
+					 * that is different than the predicate. This could potentially add confusion, and so was 
+					 * not opted for originally, but may be a future feature.
+					 */
+					lastColumn = ByteBuffer.wrap(predicate.getSlice_range().getStart());
+					if(lastColumn==null)
+						lastColumn = ByteBufferUtil.EMPTY_BYTE_BUFFER;
+				}
         private void maybeInit()
         {
             if (wideColumns != null && wideColumns.hasNext())
@@ -485,21 +506,21 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             else
             {
                 KeySlice lastRow = Iterables.getLast(rows);
-                logger.debug("Starting with last-seen row {}", lastRow.key);
+								logger.debug("Starting with last-seen row {}", lastRow.key);
                 keyRange = new KeyRange(batchSize)
                           .setStart_key(lastRow.key)
                           .setEnd_token(split.getEndToken())
                           .setRow_filter(filter);
 
             }
-
+							
 							rows = getRows(keyRange,lastColumn);
 //                rows = client.get_paged_slice(cfName, keyRange, lastColumn, consistencyLevel);
                 int n = 0;
                 for (KeySlice row : rows)
                     n += row.columns.size();
-                logger.debug("read {} columns in {} rows for {} starting with {}",
-                             new Object[]{ n, rows.size(), keyRange, lastColumn });
+                logger.debug("read {} columns in {} rows" ,
+                             new Object[]{ n, rows.size()});//, keyRange, lastColumn });
 
                 wideColumns = Iterators.peekingIterator(new WideColumnIterator(rows));
                 if (wideColumns.hasNext() && wideColumns.peek().right.keySet().iterator().next().equals(lastColumn))
@@ -514,7 +535,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             }
 						*/
         }
-				private List<KeySlice> getRows(final KeyRange range, final ByteBuffer lastColumn) {
+				private List<KeySlice> getRows(final KeyRange range, final ByteBuffer startColumn) {
 					try
 					{
 						return client.execute(new Client.Command<List<KeySlice>>()
@@ -525,8 +546,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 								{
 									try
 									{
-										return cassandraClient.get_paged_slice(cfName,range,
-																													lastColumn,consistencyLevel);
+										return cassandraClient.get_paged_slice(cfName,range,startColumn,consistencyLevel,predicate);
 									}
 									catch(InvalidRequestException e)
 									{
