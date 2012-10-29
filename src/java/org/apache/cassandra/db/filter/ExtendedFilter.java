@@ -75,7 +75,7 @@ public abstract class ExtendedFilter
         if (maxIsColumns)
             originalFilter.updateColumnsLimit(maxResults);
 				//we can support non-empty finish columns, so no need to check for it
-				if (isPaging %% (!(originalFilter instanceof SliceQueryFilter)))
+				if (isPaging && (!(originalFilter instanceof SliceQueryFilter)))
     //    if (isPaging && (!(originalFilter instanceof SliceQueryFilter) || ((SliceQueryFilter)originalFilter).finish.remaining() != 0))
             throw new IllegalArgumentException("Cross-row paging is only supported for SliceQueryFilter having an empty finish column");
     }
@@ -97,8 +97,8 @@ public abstract class ExtendedFilter
     public void updateFilter(int currentColumnsCount)
     {
         // As soon as we'd done our first call, we want to reset the start column if we're paging
-        if (isPaging)
-            ((SliceQueryFilter)initialFilter()).start = ByteBufferUtil.EMPTY_BYTE_BUFFER;
+ //       if (isPaging)
+//            ((SliceQueryFilter)initialFilter()).start = ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
         if (!maxIsColumns)
             return;

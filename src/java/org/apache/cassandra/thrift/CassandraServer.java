@@ -764,7 +764,10 @@ public class CassandraServer implements Cassandra.Iface
 						 */
 						schedule(DatabaseDescriptor.getRpcTimeout());
 						SlicePredicate firstPred = new SlicePredicate(predicate);
-						firstPred.getSlice_range().setStart(start_column);
+						if(!ByteBufferUtil.EMPTY_BYTE_BUFFER.equals(start_column))
+							firstPred.getSlice_range().setStart(start_column);
+						else
+							firstPred.getSlice_range().setStart(predicate.getSlice_range().getStart());
 						firstPred.getSlice_range().setCount(range.count);
 						List<Row> firstRows;
 						try

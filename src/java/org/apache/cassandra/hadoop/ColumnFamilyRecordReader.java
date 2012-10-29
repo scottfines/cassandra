@@ -469,7 +469,6 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
     {
         private PeekingIterator<Pair<ByteBuffer, SortedMap<ByteBuffer, IColumn>>> wideColumns;
         private ByteBuffer lastColumn = ByteBufferUtil.EMPTY_BYTE_BUFFER;
-
 				WideRowIterator(){
 					super();
 
@@ -484,10 +483,11 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 					 * that is different than the predicate. This could potentially add confusion, and so was 
 					 * not opted for originally, but may be a future feature.
 					 */
-					lastColumn = ByteBuffer.wrap(predicate.getSlice_range().getStart());
-					if(lastColumn==null)
+					//lastColumn = ByteBuffer.wrap(predicate.getSlice_range().getStart());
+					//if(lastColumn==null)
 						lastColumn = ByteBufferUtil.EMPTY_BYTE_BUFFER;
 				}
+
         private void maybeInit()
         {
             if (wideColumns != null && wideColumns.hasNext())
@@ -506,7 +506,12 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             else
             {
                 KeySlice lastRow = Iterables.getLast(rows);
-								logger.debug("Starting with last-seen row {}", lastRow.key);
+								try
+								{
+									logger.debug("Starting with last-seen row {} and column {}",lastRow.key,lastColumn);
+								}catch(Exception e){
+									logger.info("Non-ascii encoding detected");
+								}
                 keyRange = new KeyRange(batchSize)
                           .setStart_key(lastRow.key)
                           .setEnd_token(split.getEndToken())
@@ -517,8 +522,9 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 							rows = getRows(keyRange,lastColumn);
 //                rows = client.get_paged_slice(cfName, keyRange, lastColumn, consistencyLevel);
                 int n = 0;
-                for (KeySlice row : rows)
+                for (KeySlice row : rows){
                     n += row.columns.size();
+								}
                 logger.debug("read {} columns in {} rows" ,
                              new Object[]{ n, rows.size()});//, keyRange, lastColumn });
 
@@ -535,6 +541,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             }
 						*/
         }
+
 				private List<KeySlice> getRows(final KeyRange range, final ByteBuffer startColumn) {
 					try
 					{
