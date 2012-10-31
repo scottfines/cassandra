@@ -21,38 +21,44 @@ package org.apache.cassandra.hadoop;
  */
 
 
+//import org.apache.cassandra.exceptions.SyntaxException;
+
+import com.google.common.collect.*;
+
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.util.*;
 
-import com.google.common.collect.*;
-import org.apache.thrift.transport.TTransport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.nio.ByteBuffer;
+
+import java.util.*;
 
 import org.apache.cassandra.auth.IAuthenticator;
 import org.apache.cassandra.config.ConfigurationException;
-//import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.thrift.*;
+import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TSocket;
-import org.apache.cassandra.thrift.InvalidRequestException;
-import java.io.UnsupportedEncodingException;
+import org.apache.thrift.transport.TTransport;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
     implements org.apache.hadoop.mapred.RecordReader<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
@@ -157,14 +163,20 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 
         keyspace = ConfigHelper.getInputKeyspace(conf);
 
+				if(client !=null && client.isOpen())
+					return;
+				
+
         try
         {
-					if(client !=null && client.isOpen())
-						return;
-
-					client = ConfigHelper.isRemote(conf) ? new RemoteClient(split.getLocations(),keyspace,conf) :
-																								 new LocalClient(split.getLocations(),keyspace,conf);
-
+					String[] locations = split.getLocations();
+					if(ConfigHelper.isRemote(conf)){
+						logger.info("Initializing remote client for locations [{}]",StringUtils.join(locations,","));
+						client = new RemoteClient(locations,keyspace,conf);
+					}else{
+						logger.info("Initializing local client");
+						client = new LocalClient(locations,keyspace,conf);
+					}
 					client.open();
 					/*
             // only need to connect once
@@ -192,7 +204,8 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         }
         catch (Exception e)
         {
-            throw new RuntimeException(e);
+					logger.error("Unexpected error opening client",e);
+          throw new RuntimeException("Unexpected error opening client",e);
         }
 
         iter = widerows ? new WideRowIterator() : new StaticRowIterator();
@@ -506,12 +519,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             else
             {
                 KeySlice lastRow = Iterables.getLast(rows);
-								try
-								{
-									logger.debug("Starting with last-seen row {} and column {}",lastRow.key,lastColumn);
-								}catch(Exception e){
-									logger.info("Non-ascii encoding detected");
-								}
+								logger.debug("Starting with last-seen row {} and column {}",lastRow.key,lastColumn);
                 keyRange = new KeyRange(batchSize)
                           .setStart_key(lastRow.key)
                           .setEnd_token(split.getEndToken())

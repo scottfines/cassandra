@@ -367,6 +367,11 @@ public class ConfigHelper
         return conf.get(OUTPUT_COLUMNFAMILY_CONFIG);
     }
 
+		public static void setReadConsistencyLevel(Configuration conf, ConsistencyLevel cl)
+		{
+			conf.set(READ_CONSISTENCY_LEVEL,cl.name());
+		}
+
     public static String getReadConsistencyLevel(Configuration conf)
     {
         return conf.get(READ_CONSISTENCY_LEVEL, "ONE");

@@ -26,7 +26,7 @@ import java.net.UnknownHostException;
 import java.lang.AssertionError;
 import java.util.Collections;
 
-class LocalClient implements Client{
+public class LocalClient implements Client{
 	private Cassandra.Client client;
 	private TSocket socket;
 	private Configuration conf;

@@ -55,7 +55,7 @@ import org.apache.cassandra.thrift.AuthorizationException;
  * to run TaskTrackers on separate boxes and thus allows for bulk <em>move</em> operations, rather than
  * just bulk-processing operations.
  */
-class RemoteClient implements Client{
+public class RemoteClient implements Client{
 	private static final Logger logger = LoggerFactory.getLogger(RemoteClient.class);
 	private final String[] locations;
 	private int currentPos = 0;
@@ -105,9 +105,11 @@ class RemoteClient implements Client{
 	{
 		if (currentClient ==null)
 			borrow();
-
-		while (true)
+		
+		int numTries = locations.length-1;
+		while (numTries>=0)
 		{
+			numTries--;
 			try{
 				return command.execute(currentClient);
 			}
@@ -149,6 +151,9 @@ class RemoteClient implements Client{
 				throw new IOException(e);
 			}
 		}
+		logger.error("Could not complete request successfully after {} tries, failing request",locations.length);
+		throw new IOException(
+							String.format("Could not complete request successfully after %d tries",locations.length));
 	}
 
 	private void borrow() throws IOException
@@ -159,7 +164,7 @@ class RemoteClient implements Client{
 			logger.trace("Closing already open socket");
 			currentSocket.close();
 		}
-
+		logger.info("Attempting to connect to any of ",locations);
 		for (int i=0;i<locations.length;i++)
 		{
 			int pos = currentPos%locations.length;
